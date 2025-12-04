@@ -4,7 +4,7 @@ import asyncio
 from pyrogram import Client, filters
 from pyrogram.enums import MessagesFilter 
 from pyrogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton, Document, Video, Audio
-from pyrogram.errors import UserNotParticipant
+from pyrogram.errors import UserNotParticipant, MessageNotModified 
 from motor.motor_asyncio import AsyncIOMotorClient
 from dotenv import load_dotenv
 from typing import List, Dict, Any, Union
@@ -22,7 +22,7 @@ API_HASH = os.environ.get("API_HASH", "YOUR_API_HASH")
 BOT_TOKEN = os.environ.get("BOT_TOKEN", "YOUR_BOT_TOKEN")
 PRIVATE_FILE_STORE = int(os.environ.get("PRIVATE_FILE_STORE", -100))
 LOG_CHANNEL = int(os.environ.get("LOG_CHANNEL", -100))
-# NEW: User session string is mandatory for indexing private channels
+# User session string is mandatory for indexing private channels
 USER_SESSION_STRING = os.environ.get("USER_SESSION_STRING", None) 
 
 
@@ -131,9 +131,25 @@ def get_file_info(message: Message) -> tuple[str, str, Union[Document, Video, Au
         return message.audio.file_id, file_name, message.audio
     return None, None, None
 
+# --- Start Command ---
+@app.on_message(filters.command("start") & filters.private)
+async def start_command(client, message: Message):
+    """Handles the /start command in private chat."""
+    await message.reply_text(
+        f"Hi {message.from_user.first_name}, I am an Auto Filter Bot. You can search for files I have indexed in your file store channel.\n\n"
+        "To search, simply send the file name.\n\n"
+        "**Admin Commands:**\n"
+        "• `/index` - To index all old files from the channel (automatic full indexing).\n"
+        "• `/dbcount` - To check the number of files in the database."
+    )
+    print(f"DEBUG: Start command received from {message.from_user.id}")
+
 @app.on_message(filters.command("index") & filters.user(ADMINS))
 async def index_command(client, message: Message):
-    """Command to index files from the file store channel using a user session."""
+    """
+    Command to index all files from the file store channel using a user session.
+    The indexing is now full and automatic (no limit parameter).
+    """
     if PRIVATE_FILE_STORE == -100:
         await message.reply_text("PRIVATE_FILE_STORE ID is not provided in ENV. Indexing is not possible.")
         return
@@ -142,13 +158,12 @@ async def index_command(client, message: Message):
          await message.reply_text("❌ Indexing Error: **USER_SESSION_STRING** is not provided in ENV. Please generate and provide the user session string.")
          return
 
-    msg = await message.reply_text("🔑 Starting file indexing using User Session... (Check logs)")
+    msg = await message.reply_text("🔑 Starting full automatic file indexing using User Session... This may take a while. (Check logs)")
     
     total_files_indexed = 0
     total_messages_processed = 0
     
     # --- Initialize User Client for Indexing Only ---
-    # This bypasses the bot-specific "BOT_METHOD_INVALID" error
     user_client = Client(
         "indexer_session",
         api_id=API_ID,
@@ -159,8 +174,8 @@ async def index_command(client, message: Message):
     try:
         await user_client.start() # Start the user client
 
-        # Use get_chat_history, which works reliably with user sessions to fetch old messages
-        async for chat_msg in user_client.get_chat_history(chat_id=PRIVATE_FILE_STORE, limit=1000):
+        # Pyrogram's get_chat_history without a limit will automatically iterate through ALL messages
+        async for chat_msg in user_client.get_chat_history(chat_id=PRIVATE_FILE_STORE): 
             total_messages_processed += 1
             file_id, file_name, file_object = get_file_info(chat_msg)
             
@@ -186,8 +201,12 @@ async def index_command(client, message: Message):
                     total_files_indexed += 1
                     
                     if total_files_indexed % 50 == 0:
-                         await msg.edit_text(f"✅ Indexed files: {total_files_indexed} / {total_messages_processed}")
-                         print(f"INDEX_DEBUG: Successfully indexed {file_name}") 
+                         # Update status every 50 files
+                         try:
+                             await msg.edit_text(f"✅ Indexed files: {total_files_indexed} / {total_messages_processed}")
+                             print(f"INDEX_DEBUG: Successfully indexed {file_name}") 
+                         except MessageNotModified:
+                             pass # Simply ignore if the text is the same.
 
                 except Exception as db_error:
                     print(f"INDEX_DEBUG: DB WRITE ERROR for file {file_name}: {db_error}")
@@ -200,12 +219,7 @@ async def index_command(client, message: Message):
         # Final report after indexing completion
         await msg.edit_text(f"🎉 Indexing complete! Total {total_files_indexed} files added/updated. ({total_messages_processed} messages processed)")
         
-        # If there are more messages, prompt the user to run again
-        if total_messages_processed == 1000:
-            await client.send_message(
-                message.chat.id,
-                "⚠️ **ശ്രദ്ധിക്കുക:** ഒരു സമയം 1000 മെസ്സേജുകൾ മാത്രമേ ഇൻഡെക്സ് ചെയ്യുകയുള്ളൂ. കൂടുതൽ പഴയ മെസ്സേജുകൾ ഇൻഡെക്സ് ചെയ്യാൻ `/index` കമാൻഡ് **വീണ്ടും അയക്കുക**."
-            )
+        # No more 'run again' warning since it's now full auto-indexing
         
     except Exception as general_error:
         # Catch large errors like lack of channel access
@@ -259,7 +273,7 @@ async def global_handler(client, message: Message):
         
         if files:
             # Files found: send inline buttons
-            text = f"ഇതാ നിങ്ങൾ തിരഞ്ഞ **{query}**-യുമായി ബന്ധപ്പെട്ട ഫയലുകൾ:\n\n"
+            text = f"Here are the files related to **{query}**:\n\n"
             buttons = []
             for file in files:
                 media_icon = {"document": "📄", "video": "🎬", "audio": "🎶"}.get(file.get('media_type', 'document'), '❓')
@@ -273,7 +287,7 @@ async def global_handler(client, message: Message):
                 ])
             
             if len(files) == 10:
-                 buttons.append([InlineKeyboardButton("കൂടുതൽ ഫലങ്ങൾ", url="https://t.me/your_search_group")]) 
+                 buttons.append([InlineKeyboardButton("More Results", url="https://t.me/your_search_group")]) 
 
             sent_message = await message.reply_text(
                 text=text,
@@ -296,10 +310,10 @@ async def global_handler(client, message: Message):
         if not FORCE_SUB_CHANNEL: return
         
         join_button = [
-            [InlineKeyboardButton("ചാനലിൽ ചേരുക", url=f"https://t.me/{FORCE_SUB_CHANNEL.replace('@', '')}")]
+            [InlineKeyboardButton("Join Channel to get files", url=f"https://t.me/{FORCE_SUB_CHANNEL.replace('@', '')}")]
         ]
         await message.reply_text(
-            f"നിങ്ങൾക്ക് ഫയലുകൾ ലഭിക്കണമെങ്കിൽ ആദ്യം ഞങ്ങളുടെ ചാനലിൽ ചേരുക.",
+            f"Please join our channel first to receive the files.",
             reply_markup=InlineKeyboardMarkup(join_button)
         )
 
@@ -311,7 +325,7 @@ async def send_file_handler(client, callback):
     
     # Force subscribe check
     if FORCE_SUB_CHANNEL and not await is_subscribed(client, callback.from_user.id):
-        await callback.answer("ഫയൽ ലഭിക്കാൻ ചാനലിൽ ചേരുക.", show_alert=True)
+        await callback.answer("Join the channel to get the file.", show_alert=True)
         return
 
     file_id = callback.data.split("_")[1]
@@ -325,12 +339,12 @@ async def send_file_handler(client, callback):
                 from_chat_id=file['chat_id'],
                 message_ids=file['message_id']
             )
-            await callback.answer("ഫയൽ അയച്ചിരിക്കുന്നു.", show_alert=False)
+            await callback.answer("File has been sent.", show_alert=False)
         except Exception as e:
-            await callback.answer("ഫയൽ അയക്കുന്നതിൽ ഒരു പിഴവ് സംഭവിച്ചു. ബോട്ടിന് ആക്സസ് ഉണ്ടോയെന്ന് പരിശോധിക്കുക.", show_alert=True)
+            await callback.answer("An error occurred while sending the file. Check bot access.", show_alert=True)
             print(f"File forward error: {e}")
     else:
-        await callback.answer("ഫയൽ ഡാറ്റാബേസിൽ നിന്ന് നീക്കം ചെയ്യപ്പെട്ടു.", show_alert=True)
+        await callback.answer("The file was removed from the database.", show_alert=True)
     
     try:
         await callback.message.delete()
