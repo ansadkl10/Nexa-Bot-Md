@@ -127,30 +127,43 @@ def get_file_name_for_search(file_title: str) -> str:
     Extracts a cleaner title from the file name for IMDb search, 
     removing common resolution, quality, or group tags.
     """
+    if not file_title:
+        return ""
+        
     # Remove common separators and non-essential parts
     clean_title = re.sub(r'[\(\)\[\]\{\}\-_\.]', ' ', file_title)
     
     # Remove common video quality/encoding tags
-    clean_title = re.sub(r'(\d{3,4}p|4k|hd|bluray|webrip|x\d{3}|aac|mp4|mkv|avi|dual audio|eng sub|sub eng|tamil dubbed)', 
+    clean_title = re.sub(r'(\d{3,4}p|4k|hd|bluray|webrip|x\d{3}|aac|mp4|mkv|avi|dual audio|eng sub|sub eng|tamil dubbed|hevc|x265|x264|v2|official)', 
                          '', clean_title, flags=re.IGNORECASE)
     
     # Remove file extension
     clean_title = clean_title.rsplit('.', 1)[0]
     
     # Attempt to capture the year if present
-    match = re.search(r'(\d{4})', clean_title)
-    year = match.group(1) if match else None
+    match_year = re.search(r'(\d{4})', clean_title)
+    year = match_year.group(1) if match_year else None
     
-    # Keep only the first part before a definitive year or a very long tag
+    # Split, clean, and rebuild
     parts = clean_title.split()
     final_parts = []
     
     for part in parts:
-        if part.isdigit() and len(part) == 4 and int(part) > 1900 and int(part) < 2050 and len(final_parts) > 1:
+        # Stop if a likely year is encountered (and we have enough title parts)
+        if year and part == year and len(final_parts) > 1:
             break
-        final_parts.append(part)
+        # Ignore short generic words unless they are the entire title
+        if len(part) > 1 or len(final_parts) == 0:
+            final_parts.append(part)
         
-    return " ".join(final_parts).strip()
+    final_search_term = " ".join(final_parts).strip()
+    
+    # Final check: ensure the search term is not empty or just a year/number
+    if len(final_search_term) < 2 or final_search_term.isdigit():
+        # Fallback to the original title if cleaning was too aggressive
+        return file_title.rsplit('.', 1)[0].strip()
+        
+    return final_search_term
 
 
 async def fetch_omdb_data(title: str) -> Dict[str, str]:
@@ -164,6 +177,7 @@ async def fetch_omdb_data(title: str) -> Dict[str, str]:
 
     search_title = get_file_name_for_search(title)
     if not search_title:
+        print("DEBUG: OMDb search skipped because search_title is empty.")
         return {}
         
     params = {
@@ -172,6 +186,8 @@ async def fetch_omdb_data(title: str) -> Dict[str, str]:
         'plot': 'short'    
     }
 
+    print(f"DEBUG: Attempting OMDb search for query: '{search_title}'") # Added for debugging
+    
     try:
         async with httpx.AsyncClient() as client:
             response = await client.get(OMDB_API_URL, params=params, timeout=5)
@@ -195,7 +211,7 @@ async def fetch_omdb_data(title: str) -> Dict[str, str]:
                 return {}
                 
     except httpx.HTTPStatusError as e:
-        print(f"ERROR: HTTP error during OMDb fetch: {e}")
+        print(f"ERROR: HTTP error during OMDb fetch (Status {e.response.status_code}). Check OMDB_API_KEY or network.")
         return {}
     except httpx.RequestError as e:
         print(f"ERROR: Network error during OMDb fetch: {e}")
@@ -284,6 +300,7 @@ async def start_command(client, message: Message):
         "°•➤@Mala_Tv \n"
         "°•➤@MalaTvbot  ™️\n"
         "🙂🙂\n\n"
+        "⚠️ **പ്രധാന നിർദ്ദേശം:** ഫയലുകൾ ലഭിക്കാനായി നിങ്ങൾ ആദ്യം ഈ സ്വകാര്യ ചാറ്റിൽ ഒരു തവണ /start അയച്ച് ബോട്ടുമായി ബന്ധം സ്ഥാപിച്ചിരിക്കണം. അതിനുശേഷം ഗ്രൂപ്പിലെ ബട്ടൺ ക്ലിക്ക് ചെയ്യുക.\n\n"
         "To search for files, please type the name in a group or channel where I am an admin. Click the button there, and I will send the file to you privately here.\n\n"
         "**Admin Commands:**\n"
         "• `/index` - To index all files in the channel.\n"
@@ -427,7 +444,7 @@ async def global_handler(client, message: Message):
     # --- 2. AUTO-FILTER SEARCH (ONLY IN GROUPS/CHANNELS) ---
     
     if chat_type == ChatType.PRIVATE:
-        await message.reply_text("👋 To search for files, please type the name in a **group or channel** where I am an admin. Click the button there, and I will send the file to you privately here.")
+        await message.reply_text("👋 To search for files, please type the name in a **group or channel** where I am an admin. Click the button there, and I will send the file to you privately here.\n\n**IMPORTANT**: You must send the /start command to the bot in this private chat first!")
         return
         
     if chat_id == PRIVATE_FILE_STORE:
@@ -483,22 +500,20 @@ async def send_file_handler(client, callback):
     message_id_str = callback.data.split("_")[1]
     message_id = int(message_id_str)
     
-    # 1. Admin Exemption: Check if the user is in the ADMINS list
     is_admin = user_id in ADMINS
-    
+    can_send_file = False
+
     if is_admin:
         print(f"DEBUG: Admin {user_id} detected. Skipping force subscribe check.")
-        # If admin, delete the original message immediately (as no check is needed)
+        can_send_file = True
         try:
             await callback.message.delete()
         except Exception as e:
             print(f"Error deleting inline message for admin: {e}")
         
-        # Skip to step 3 (File Fetching)
     else:
-        # 1. Force subscribe check for regular users
+        # Force subscribe check for regular users
         if FORCE_SUB_CHANNEL and not await is_subscribed(client, user_id, max_retries=3):
-            # If not subscribed, handle the join prompt
             join_button = [
                 [InlineKeyboardButton("Join Channel", url=f"https://t.me/{FORCE_SUB_CHANNEL.replace('@', '')}")],
                 [InlineKeyboardButton("✅ Joined, Send File", callback_data=f"checksub_{message_id}_{callback.message.id}_{callback.message.chat.id}")] 
@@ -506,27 +521,30 @@ async def send_file_handler(client, callback):
             
             await callback.answer("Please join the channel to get the file. Click the button in DM after joining.", show_alert=True)
             try:
-                # Send the button to the user's private chat
                 await client.send_message(
                     chat_id=user_id,
-                    text=f"You must join the channel {FORCE_SUB_CHANNEL} to access the file. Please join and click the button below.",
+                    text=f"You must join the channel {FORCE_SUB_CHANNEL} to access the file. Please join and click the button below.\n\n**Note: You must have sent /start to me once in this private chat.**",
                     reply_markup=InlineKeyboardMarkup(join_button)
                 )
                 await callback.answer("Please click the button sent in our private chat.", show_alert=True)
             except Exception:
-                await callback.answer("File sending failed. Please send the /start command to the bot to begin a private chat.", show_alert=True)
+                # This exception usually means user has not started the chat or blocked the bot.
+                await callback.answer("File sending failed. Please send the /start command to the bot to begin a private chat, then try again.", show_alert=True)
                 return
-            return # IMPORTANT: Exit the function here for non-subscribed users
+            return 
 
-        # 2. Subscribed, proceed to send file (for non-admins who passed the check)
-        # Deleting the group/channel message now since subscription is confirmed
+        # Subscribed, proceed to send file
+        can_send_file = True
         try:
             await callback.message.delete()
         except Exception as e:
             print(f"Error deleting inline message after sub confirmed: {e}")
 
+    
+    if not can_send_file:
+        return 
 
-    # 3. Fetch File Details (Applies to both Admins and Subscribed Users)
+    # 3. Fetch File Details 
     file = await db.files_col.find_one({"message_id": message_id}) 
     
     if not file:
@@ -541,19 +559,22 @@ async def send_file_handler(client, callback):
     
     caption = f"🎬 **{file_title}**\n\n"
     
-    if imdb_info:
+    if imdb_info and imdb_info.get('Title') != 'N/A':
         caption = f"**{imdb_info.get('Title')}** ({imdb_info.get('Year')})\n"
         caption += f"🌟 **IMDb Rating:** {imdb_info.get('Rating')}\n"
         caption += f"🎭 **Genre:** {imdb_info.get('Genre')}\n\n"
         caption += f"📖 **Plot:** {imdb_info.get('Plot', 'No plot summary available.')}\n\n"
-        caption += f"🔗 **Source:** {file_title} (Original Filename)\n\n"
+        caption += f"🔗 **Source:** `{file_title}` (Original Filename)\n\n"
         caption += f"Get your file below 👇"
     else:
         caption += "❌ **IMDb Info Not Found**\n"
+        caption += f"🔗 **Source:** `{file_title}` (Original Filename)\n\n"
         caption += "Get your file below 👇"
+
 
     # 5. Send Poster (if available)
     poster_sent = False
+    
     if imdb_info and imdb_info.get('Poster') and imdb_info['Poster'] != 'N/A':
         try:
             await client.send_photo(
@@ -561,26 +582,29 @@ async def send_file_handler(client, callback):
                 photo=imdb_info['Poster'],
                 caption=caption
             )
-            caption = None # Clear caption as it was sent with the photo
+            caption = None 
             poster_sent = True
         except Exception as e:
-            print(f"Error sending poster photo to user {user_id}: {e}. Falling back to text caption.")
+            print(f"Error sending poster photo to user {user_id}: {e}. Falling back to text caption and file forwarding.")
     
     # 6. Forward the File
     try:
+        # If poster wasn't sent, send the caption text first before the file
+        if not poster_sent and caption:
+             await client.send_message(user_id, caption)
+             caption = None 
+
+        # Forward the file
         await client.forward_messages(
             chat_id=user_id, 
             from_chat_id=file['chat_id'],
             message_ids=file['message_id']
         )
         
-        # If poster failed/wasn't sent, send the caption separately to ensure it reaches the user
-        if not poster_sent and caption:
-             await client.send_message(user_id, caption)
-        
-        await callback.answer("The file has been sent to your private chat.", show_alert=True)
+        await callback.answer("The file and details have been sent to your private chat.", show_alert=True)
         
     except Exception as e:
+        # This catches errors like 'User is blocked'
         await client.send_message(user_id, "An error occurred while sending the file. Please check if you have sent the /start command to the bot.")
         await callback.answer("File sending failed. See DM for details.", show_alert=True)
         print(f"Error forwarding file to user {user_id}: {e}")
@@ -598,7 +622,7 @@ async def check_sub_handler(client, callback):
     group_message_id = int(data_parts[2])
     group_chat_id = int(data_parts[3])
 
-    # Re-check subscription with two retries
+    # Re-check subscription
     if FORCE_SUB_CHANNEL and not await is_subscribed(client, user_id, max_retries=2): 
         await callback.answer("❌ You have not joined the channel yet. Please try again.", show_alert=True)
         return
@@ -606,64 +630,70 @@ async def check_sub_handler(client, callback):
     # Subscription SUCCESS: Now send the file (reusing send logic)
     file = await db.files_col.find_one({"message_id": message_id}) 
     
-    if file:
-        file_title = file.get('title', 'Requested File')
-        imdb_info = await fetch_omdb_data(file_title)
-
-        caption = f"🎬 **{file_title}**\n\n"
-        if imdb_info:
-            caption = f"**{imdb_info.get('Title')}** ({imdb_info.get('Year')})\n"
-            caption += f"🌟 **IMDb Rating:** {imdb_info.get('Rating')}\n"
-            caption += f"🎭 **Genre:** {imdb_info.get('Genre')}\n\n"
-            caption += f"📖 **Plot:** {imdb_info.get('Plot', 'No plot summary available.')}\n\n"
-            caption += f"🔗 **Source:** {file_title} (Original Filename)\n\n"
-            caption += f"Get your file below 👇"
-        else:
-            caption += "❌ **IMDb Info Not Found**\n"
-            caption += "Get your file below 👇"
-
-        # Send Poster (if available)
-        poster_sent = False
-        if imdb_info and imdb_info.get('Poster') and imdb_info['Poster'] != 'N/A':
-            try:
-                await client.send_photo(
-                    chat_id=user_id,
-                    photo=imdb_info['Poster'],
-                    caption=caption
-                )
-                caption = None 
-                poster_sent = True
-            except Exception as e:
-                print(f"Error sending poster photo to user {user_id}: {e}. Falling back to text caption.")
-
-        try:
-            # Forward the file
-            await client.forward_messages(
-                chat_id=user_id, 
-                from_chat_id=file['chat_id'],
-                message_ids=file['message_id']
-            )
-            
-            # If poster failed/wasn't sent, send the caption separately
-            if not poster_sent and caption:
-                 await client.send_message(user_id, caption)
-
-            # Edit the original "Join Channel" message to say success in DM
-            await callback.message.edit_text("✅ Subscription confirmed. The file has been successfully sent.")
-            
-            # Delete the original group/channel message now that the user has the file
-            try:
-                await client.delete_messages(group_chat_id, group_message_id)
-            except Exception as e:
-                print(f"Error deleting original group message after sub check: {e}")
-
-            await callback.answer("File sent.", show_alert=False)
-            
-        except Exception as e:
-            await callback.answer("An error occurred while sending the file.", show_alert=True)
-            print(f"Error forwarding file to user {user_id}: {e}")
-    else:
+    if not file:
         await callback.answer("This file has been removed from the database.", show_alert=True)
+        await callback.message.edit_text("This file has been removed from the database.")
+        return
+    
+    file_title = file.get('title', 'Requested File')
+    imdb_info = await fetch_omdb_data(file_title)
+
+    caption = f"🎬 **{file_title}**\n\n"
+    if imdb_info and imdb_info.get('Title') != 'N/A':
+        caption = f"**{imdb_info.get('Title')}** ({imdb_info.get('Year')})\n"
+        caption += f"🌟 **IMDb Rating:** {imdb_info.get('Rating')}\n"
+        caption += f"🎭 **Genre:** {imdb_info.get('Genre')}\n\n"
+        caption += f"📖 **Plot:** {imdb_info.get('Plot', 'No plot summary available.')}\n\n"
+        caption += f"🔗 **Source:** `{file_title}` (Original Filename)\n\n"
+        caption += f"Get your file below 👇"
+    else:
+        caption += "❌ **IMDb Info Not Found**\n"
+        caption += f"🔗 **Source:** `{file_title}` (Original Filename)\n\n"
+        caption += "Get your file below 👇"
+
+    # Send Poster (if available)
+    poster_sent = False
+    if imdb_info and imdb_info.get('Poster') and imdb_info['Poster'] != 'N/A':
+        try:
+            await client.send_photo(
+                chat_id=user_id,
+                photo=imdb_info['Poster'],
+                caption=caption
+            )
+            caption = None 
+            poster_sent = True
+        except Exception as e:
+            print(f"Error sending poster photo during sub check to user {user_id}: {e}. Falling back to text caption.")
+
+    try:
+        # If poster failed/wasn't sent, send the caption separately
+        if not poster_sent and caption:
+             await client.send_message(user_id, caption)
+             caption = None
+
+        # Forward the file
+        await client.forward_messages(
+            chat_id=user_id, 
+            from_chat_id=file['chat_id'],
+            message_ids=file['message_id']
+        )
+        
+        # Edit the original "Join Channel" message to say success in DM
+        await callback.message.edit_text("✅ Subscription confirmed. The file has been successfully sent.")
+        
+        # Delete the original group/channel message now that the user has the file
+        try:
+            await client.delete_messages(group_chat_id, group_message_id)
+        except Exception as e:
+            print(f"Error deleting original group message after sub check: {e}")
+
+        await callback.answer("File sent.", show_alert=False)
+        
+    except Exception as e:
+        # This catches errors like 'User is blocked'
+        await callback.answer("An error occurred while sending the file. Please check if you have sent the /start command to the bot.", show_alert=True)
+        await client.send_message(user_id, "An error occurred while sending the file. Please ensure you have not blocked the bot and have sent the /start command.")
+        print(f"Error forwarding file to user {user_id} after sub check: {e}")
 
 
 # --- RENDER WEBHOOK SETUP (FastAPI) ---
@@ -711,6 +741,8 @@ async def startup_initial_checks():
         print("----------------------------------------------------------------------")
         print("⚠️ WARNING: OMDB_API_KEY is NOT set. IMDb information will not be shown.")
         print("----------------------------------------------------------------------")
+    else:
+        print("✅ OMDB_API_KEY is set.")
 
 
 @asynccontextmanager
@@ -762,3 +794,4 @@ if __name__ == "__main__":
         print("Starting Pyrogram in polling mode...")
         asyncio.run(startup_initial_checks())
         app.run()
+
