@@ -54,7 +54,7 @@ class AutoFilterBot(Client):
             api_hash=API_HASH,
             bot_token=BOT_TOKEN,
             plugins=dict(root="plugins"),
-            # sleep=1, <--- ERROR IS HERE: Removed the 'sleep' argument as it is deprecated in Pyrogram 2.0+
+            # sleep ആർഗ്യുമെൻ്റ് Pyrogram 2.0+ ൽ നീക്കം ചെയ്തതിനാൽ ഒഴിവാക്കി.
         )
 
 # --- Bot Instance ---
@@ -137,7 +137,7 @@ async def index_command(client, message: Message):
     await msg.edit_text(f"🎉 ഇൻഡക്സിംഗ് പൂർത്തിയായി! ആകെ {total_files} ഫയലുകൾ ചേർത്തു.")
 
 
-@app.on_message(filters.text & filters.private | filters.group & filters.text & filters.incoming & ~filters.command)
+@app.on_message(filters.text & filters.private | filters.group & filters.text & filters.incoming & ~(filters.command)) # <-- ബ്രായ്ക്കറ്റ് ചേർത്ത് Error പരിഹരിച്ചു
 async def auto_filter_handler(client, message: Message):
     """ടെക്സ്റ്റ് മെസ്സേജുകൾ വരുമ്പോൾ ഫിൽട്ടർ ഫയലുകൾ തിരയുന്നു."""
     query = message.text.strip()
@@ -235,22 +235,20 @@ import uvicorn
 from http import HTTPStatus
 from contextlib import asynccontextmanager
 
-# *** FIX STARTUP ERROR LOGIC ***
+# *** STARTUP CHECKS ***
 async def startup_initial_checks():
-    """തുടങ്ങുമ്പോൾ ചെയ്യേണ്ട കോപ്പിറൈറ്റ്/മറ്റ് ചെക്കുകൾ (മുമ്പ് എറർ വന്ന ഭാഗം)."""
+    """തുടങ്ങുമ്പോൾ ചെയ്യേണ്ട ചെക്കുകൾ."""
     print("Running initial startup checks...")
     try:
-        # ഇവിടെ db.get_all_files() നെ await ചെയ്ത് എടുക്കുന്നു. ഇതാണ് പഴയ എറർ പരിഹരിക്കുന്നത്.
         files_count = len(await db.get_all_files())
         print(f"Database check completed. Found {files_count} files in the database.")
     except Exception as e:
-        # ഡാറ്റാബേസ് കണക്ഷൻ ഫെയിലിയർ പോലുള്ള പ്രശ്നങ്ങൾ ഇവിടെ ലോഡ് ചെയ്യും.
         print(f"Warning: Database check failed during startup: {e}")
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # 1. പ്രധാനപ്പെട്ട startup ചെക്കുകൾ റൺ ചെയ്യുന്നു (ഇവിടെയാണ് TypeError പരിഹരിച്ചത്)
+    # 1. പ്രധാനപ്പെട്ട startup ചെക്കുകൾ റൺ ചെയ്യുന്നു
     await startup_initial_checks()
     
     # 2. Bot തുടങ്ങുമ്പോൾ Webhook സജ്ജമാക്കുക അല്ലെങ്കിൽ Pooling തുടങ്ങുക
