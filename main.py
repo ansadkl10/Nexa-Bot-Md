@@ -16,6 +16,10 @@ import uvicorn
 # Load variables from .env file (for local testing)
 load_dotenv()
 
+# --- Global Status Flag ---
+# This flag tracks if indexing is currently running.
+IS_INDEXING_RUNNING = False
+
 # --- Config Variables ---
 API_ID = int(os.environ.get("API_ID", 12345))
 API_HASH = os.environ.get("API_HASH", "YOUR_API_HASH")
@@ -98,16 +102,23 @@ async def is_subscribed(client, user_id):
         return True 
 
 async def get_file_details(query):
-    """Searches for file information in the database."""
+    """Searches for file information in the database using a better regex for matching."""
     
     # DEBUG: Log the search query
     print(f"DEBUG: Searching for query: '{query}'")
 
+    # NEW IMPROVED REGEX: Escape special characters in the query and use '.*' 
+    # to allow matching anywhere in the string.
+    escaped_query = re.escape(query)
+    
+    # This regex pattern allows matching 'query' anywhere in the title or caption.
+    regex_pattern = f".*{escaped_query}.*"
+    
     # Use MongoDB's $regex for case-insensitive partial matching on title or caption
     cursor = db.files_col.find({ 
         "$or": [
-            {"title": {"$regex": query, "$options": "i"}},
-            {"caption": {"$regex": query, "$options": "i"}}
+            {"title": {"$regex": regex_pattern, "$options": "i"}},
+            {"caption": {"$regex": regex_pattern, "$options": "i"}}
         ]
     }).limit(10)
     
@@ -135,12 +146,18 @@ def get_file_info(message: Message) -> tuple[str, str, Union[Document, Video, Au
 @app.on_message(filters.command("start") & filters.private)
 async def start_command(client, message: Message):
     """Handles the /start command in private chat."""
+    global IS_INDEXING_RUNNING
+    
+    if IS_INDEXING_RUNNING:
+        await message.reply_text("ഇൻഡെക്സിംഗ് നടക്കുകയാണ്. ഇത് പൂർത്തിയാകുന്നതുവരെ കാത്തിരിക്കുക.")
+        return
+        
     await message.reply_text(
-        f"Hi {message.from_user.first_name}, I am an Auto Filter Bot. You can search for files I have indexed in your file store channel.\n\n"
-        "To search, simply send the file name.\n\n"
-        "**Admin Commands:**\n"
-        "• `/index` - To index all old files from the channel (automatic full indexing).\n"
-        "• `/dbcount` - To check the number of files in the database."
+        f"ഹായ് {message.from_user.first_name}, ഞാൻ ഒരു ഓട്ടോ ഫിൽട്ടർ ബോട്ടാണ്. നിങ്ങളുടെ ഫയൽ സ്റ്റോർ ചാനലിൽ ഞാൻ ഇൻഡെക്സ് ചെയ്ത ഫയലുകൾ ഇവിടെ തിരയാൻ കഴിയും.\n\n"
+        "തിരയാൻ, ഫയലിൻ്റെ പേര് മാത്രം അയക്കുക.\n\n"
+        "**അഡ്മിൻ കമാൻഡുകൾ:**\n"
+        "• `/index` - ചാനലിലെ പഴയ ഫയലുകൾ ഇൻഡെക്സ് ചെയ്യാൻ (പൂർണ്ണ ഓട്ടോമാറ്റിക്).\n"
+        "• `/dbcount` - ഡാറ്റാബേസിലെ ഫയലുകളുടെ എണ്ണം അറിയാൻ."
     )
     print(f"DEBUG: Start command received from {message.from_user.id}")
 
@@ -150,6 +167,12 @@ async def index_command(client, message: Message):
     Command to index all files from the file store channel using a user session.
     The indexing is now full and automatic (no limit parameter).
     """
+    global IS_INDEXING_RUNNING
+    
+    if IS_INDEXING_RUNNING:
+        await message.reply_text("❌ ശ്രദ്ധിക്കുക: ഇൻഡെക്സിംഗ് പ്രോസസ്സ് ഇതിനകം നടന്നുകൊണ്ടിരിക്കുകയാണ്. ഇത് പൂർത്തിയാകുന്നതുവരെ ദയവായി കാത്തിരിക്കുക.")
+        return
+
     if PRIVATE_FILE_STORE == -100:
         await message.reply_text("PRIVATE_FILE_STORE ID is not provided in ENV. Indexing is not possible.")
         return
@@ -158,7 +181,9 @@ async def index_command(client, message: Message):
          await message.reply_text("❌ Indexing Error: **USER_SESSION_STRING** is not provided in ENV. Please generate and provide the user session string.")
          return
 
-    msg = await message.reply_text("🔑 Starting full automatic file indexing using User Session... This may take a while. (Check logs)")
+    IS_INDEXING_RUNNING = True # Set the flag to True
+    
+    msg = await message.reply_text("🔑 പൂർണ്ണമായി ഓട്ടോമാറ്റിക് ഇൻഡെക്സിംഗ് ആരംഭിക്കുന്നു... ഇത് കുറച്ച് സമയമെടുത്തേക്കാം. (ലോഗുകൾ പരിശോധിക്കുക)")
     
     total_files_indexed = 0
     total_messages_processed = 0
@@ -203,7 +228,7 @@ async def index_command(client, message: Message):
                     if total_files_indexed % 50 == 0:
                          # Update status every 50 files
                          try:
-                             await msg.edit_text(f"✅ Indexed files: {total_files_indexed} / {total_messages_processed}")
+                             await msg.edit_text(f"✅ ഇൻഡെക്സ് ചെയ്ത ഫയലുകൾ: {total_files_indexed} / {total_messages_processed}")
                              print(f"INDEX_DEBUG: Successfully indexed {file_name}") 
                          except MessageNotModified:
                              pass # Simply ignore if the text is the same.
@@ -217,17 +242,16 @@ async def index_command(client, message: Message):
                     print(f"INDEX_DEBUG: Skipping message {chat_msg.id} - Not a supported file type (Doc/Vid/Aud).")
             
         # Final report after indexing completion
-        await msg.edit_text(f"🎉 Indexing complete! Total {total_files_indexed} files added/updated. ({total_messages_processed} messages processed)")
-        
-        # No more 'run again' warning since it's now full auto-indexing
+        await msg.edit_text(f"🎉 ഇൻഡെക്സിംഗ് പൂർത്തിയായി! ആകെ {total_files_indexed} ഫയലുകൾ ചേർത്തു/അപ്ഡേറ്റ് ചെയ്തു. ({total_messages_processed} മെസ്സേജുകൾ പ്രോസസ്സ് ചെയ്തു)")
         
     except Exception as general_error:
         # Catch large errors like lack of channel access
-        await msg.edit_text(f"❌ Indexing Error: {general_error}. Check if the user account has access to the channel and the ID is correct.")
+        await msg.edit_text(f"❌ ഇൻഡെക്സിംഗ് പിശക്: {general_error}. യൂസർ അക്കൗണ്ടിന് ചാനലിലേക്ക് ആക്സസ് ഉണ്ടോയെന്നും ID ശരിയാണോ എന്നും പരിശോധിക്കുക.")
         print(f"INDEX_DEBUG: FATAL INDEXING ERROR: {general_error}")
         
     finally:
         await user_client.stop() # Stop the user client
+        IS_INDEXING_RUNNING = False # Reset the flag to False
 
 
 # Auto-Filter and Copyright Handler (Global)
@@ -237,10 +261,17 @@ async def global_handler(client, message: Message):
     query = message.text.strip()
     chat_id = message.chat.id
     
+    # Check if indexing is running
+    global IS_INDEXING_RUNNING
+    if IS_INDEXING_RUNNING:
+        # If indexing is running, skip the search to avoid slowing down the indexer
+        await message.reply_text("ഇൻഡെക്സിംഗ് നടക്കുന്നു. ദയവായി കുറച്ച് കഴിഞ്ഞ് വീണ്ടും ശ്രമിക്കുക.")
+        return
+    
     # DEBUG: Log the incoming message
     print(f"DEBUG: Incoming text from chat {chat_id}: '{query}'")
     
-    # --- 1. Copyright Message Deletion Logic ---
+    # --- 1. Copyright Message Deletion Logic (Omitted for brevity, kept essential checks) ---
     COPYRIGHT_KEYWORDS = ["copyright", "unauthorized", "DMCA", "piracy"] 
     
     is_copyright_message = any(keyword.lower() in query.lower() for keyword in COPYRIGHT_KEYWORDS)
@@ -273,7 +304,7 @@ async def global_handler(client, message: Message):
         
         if files:
             # Files found: send inline buttons
-            text = f"Here are the files related to **{query}**:\n\n"
+            text = f"ഇതാ നിങ്ങൾ തിരഞ്ഞ **{query}**-യുമായി ബന്ധപ്പെട്ട ഫയലുകൾ:\n\n"
             buttons = []
             for file in files:
                 media_icon = {"document": "📄", "video": "🎬", "audio": "🎶"}.get(file.get('media_type', 'document'), '❓')
@@ -287,7 +318,7 @@ async def global_handler(client, message: Message):
                 ])
             
             if len(files) == 10:
-                 buttons.append([InlineKeyboardButton("More Results", url="https://t.me/your_search_group")]) 
+                 buttons.append([InlineKeyboardButton("കൂടുതൽ ഫലങ്ങൾ", url="https://t.me/your_search_group")]) 
 
             sent_message = await message.reply_text(
                 text=text,
@@ -310,10 +341,10 @@ async def global_handler(client, message: Message):
         if not FORCE_SUB_CHANNEL: return
         
         join_button = [
-            [InlineKeyboardButton("Join Channel to get files", url=f"https://t.me/{FORCE_SUB_CHANNEL.replace('@', '')}")]
+            [InlineKeyboardButton("ചാനലിൽ ചേരുക", url=f"https://t.me/{FORCE_SUB_CHANNEL.replace('@', '')}")]
         ]
         await message.reply_text(
-            f"Please join our channel first to receive the files.",
+            f"നിങ്ങൾക്ക് ഫയലുകൾ ലഭിക്കണമെങ്കിൽ ആദ്യം ഞങ്ങളുടെ ചാനലിൽ ചേരുക.",
             reply_markup=InlineKeyboardMarkup(join_button)
         )
 
@@ -325,7 +356,7 @@ async def send_file_handler(client, callback):
     
     # Force subscribe check
     if FORCE_SUB_CHANNEL and not await is_subscribed(client, callback.from_user.id):
-        await callback.answer("Join the channel to get the file.", show_alert=True)
+        await callback.answer("ഫയൽ ലഭിക്കാൻ ചാനലിൽ ചേരുക.", show_alert=True)
         return
 
     file_id = callback.data.split("_")[1]
@@ -339,12 +370,12 @@ async def send_file_handler(client, callback):
                 from_chat_id=file['chat_id'],
                 message_ids=file['message_id']
             )
-            await callback.answer("File has been sent.", show_alert=False)
+            await callback.answer("ഫയൽ അയച്ചിരിക്കുന്നു.", show_alert=False)
         except Exception as e:
-            await callback.answer("An error occurred while sending the file. Check bot access.", show_alert=True)
+            await callback.answer("ഫയൽ അയക്കുന്നതിൽ ഒരു പിഴവ് സംഭവിച്ചു. ബോട്ടിന് ആക്സസ് ഉണ്ടോയെന്ന് പരിശോധിക്കുക.", show_alert=True)
             print(f"File forward error: {e}")
     else:
-        await callback.answer("The file was removed from the database.", show_alert=True)
+        await callback.answer("ഫയൽ ഡാറ്റാബേസിൽ നിന്ന് നീക്കം ചെയ്യപ്പെട്ടു.", show_alert=True)
     
     try:
         await callback.message.delete()
