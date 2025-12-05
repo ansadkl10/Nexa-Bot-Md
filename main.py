@@ -5,7 +5,7 @@ import json
 from pyrogram import Client, filters
 from pyrogram.enums import ChatType
 from pyrogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton, Document, Video, Audio
-from pyrogram.errors import UserNotParticipant, MessageNotModified, ChatAdminRequired, RPCError
+from pyrogram.errors import UserNotParticipant, MessageNotModified, ChatAdminRequired, RPCError, MessageIdInvalid
 from motor.motor_asyncio import AsyncIOMotorClient
 from dotenv import load_dotenv
 from typing import List, Dict, Any, Union
@@ -13,7 +13,6 @@ from fastapi import FastAPI, Request, Response
 from contextlib import asynccontextmanager
 from http import HTTPStatus
 import uvicorn
-# httpx import removed as per user request (No external APIs like IMDb used)
 
 # Load variables from the .env file
 load_dotenv()
@@ -297,7 +296,8 @@ async def index_command(client, message: Message):
         print(f"INDEX_DEBUG: Fatal indexing error: {general_error}")
         
     finally:
-        await user_client.stop() 
+        if 'user_client' in locals():
+            await user_client.stop() 
         IS_INDEXING_RUNNING = False
 
 @app.on_message(filters.command("dbcount") & filters.user(ADMINS))
@@ -358,7 +358,6 @@ async def global_handler(client, message: Message):
         # Files found: Send inline buttons (Fully English)
         text = f"✅ **Search Results for {query}:**\n\nClick the button below to get the file. The file will be sent to your private chat."
         buttons = []
-        # --- START BUTTON GENERATION LOOP (This creates one button for every file found) ---
         for file in files:
             media_icon = {"document": "📄", "video": "🎬", "audio": "🎵"}.get(file.get('media_type', 'document'), '❓')
             file_name_clean = file.get("title", "File").rsplit('.', 1)[0].strip() 
@@ -370,7 +369,6 @@ async def global_handler(client, message: Message):
                     callback_data=f"getmsg_{file.get('message_id')}" 
                 )
             ])
-        # --- END BUTTON GENERATION LOOP ---
         
         if len(files) == 10:
              buttons.append([InlineKeyboardButton("More Results ➡️", url="https://t.me/your_search_group")]) 
@@ -397,50 +395,81 @@ async def global_handler(client, message: Message):
 
 async def handle_send_file(client, user_id, message_id, delete_message_id=None, delete_chat_id=None):
     """
-    Core function to copy ONLY the file content. 
-    NOTE: client.copy_message copies the file along with its ORIGINAL caption from the source channel.
+    Core function to copy ONLY the file content. Includes a fallback mechanism 
+    using the user session to forward the message if bot's copy fails (e.g., due to file reference expiry).
     """
     
     file = await db.files_col.find_one({"message_id": message_id}) 
     
     if not file:
-        # Ensure error message is sent immediately if file not found (English)
         try:
             await client.send_message(user_id, "❌ This file has been removed from the database.")
         except Exception:
             pass
         return False, "File removed."
+        
+    source_chat_id = file['chat_id']
+    source_message_id = file['message_id']
+    success = False
 
-    # --- 1. Copy the File (This copies the file ALONG with its original caption) ---
+    # --- 1. Primary Attempt: Bot copies the message ---
     try:
         await client.copy_message(
             chat_id=user_id, 
-            from_chat_id=file['chat_id'],
-            message_ids=file['message_id']
+            from_chat_id=source_chat_id,
+            message_ids=source_message_id
         )
-        
-        # Optional: Delete the original group filter message if needed
-        if delete_message_id and delete_chat_id:
-            try:
-                # The group message is automatically deleted on success check.
-                await client.delete_messages(delete_chat_id, delete_message_id)
-            except Exception as e:
-                print(f"Error deleting original group message: {e}")
+        success = True
 
-        return True, "File sent successfully."
-        
     except RPCError as e:
-        # Simplified error handling for common issues (User block, protected content - English)
-        print(f"RPC Error copying file to user {user_id}: {e}")
-        error_msg = "❌ **File could not be sent!** ❌\n\nIf you have blocked the bot, please unblock it and send **/start** first. The file may also be protected."
-        try:
-            await client.send_message(user_id, error_msg)
-        except Exception:
-            pass
-        return False, error_msg
+        print(f"RPC Error copying file to user {user_id} using BOT client: {e}")
+        # --- 2. Fallback Attempt: If bot copy fails (e.g., file_reference_expired or protected content) ---
+        
+        # Check if USER_SESSION_STRING is available for fallback
+        # NOTE: If content restriction is ON, this fallback will also fail.
+        if USER_SESSION_STRING and any(err in str(e) for err in ['FILE_REFERENCE_EXPIRED', 'MESSAGE_NOT_MODIFIED', 'MESSAGE_ID_INVALID']):
+             print(f"Attempting fallback to USER SESSION for forwarding message {source_message_id}")
+             
+             user_client = None
+             try:
+                 # Start user client temporarily for forwarding
+                 user_client = Client("fallback_indexer", api_id=API_ID, api_hash=API_HASH, session_string=USER_SESSION_STRING)
+                 await user_client.start()
+                 
+                 # Use forward_messages instead of copy_message for robustness with user session
+                 await user_client.forward_messages(
+                     chat_id=user_id,
+                     from_chat_id=source_chat_id,
+                     message_ids=source_message_id
+                 )
+                 success = True
+
+             except Exception as fallback_error:
+                 print(f"Fallback attempt failed: {fallback_error}")
+                 success = False
+
+             finally:
+                 if user_client:
+                     await user_client.stop()
+        else:
+            success = False # No user session or the error is critical (e.g., user blocked bot)
+
     except Exception as e:
         print(f"Unexpected error copying file to user {user_id}: {e}")
-        error_msg = "❌ An unexpected error occurred while sending the file. (Failed to copy file)"
+        success = False
+
+    # --- 3. Final Result Handling ---
+    if success:
+        if delete_message_id and delete_chat_id:
+            try:
+                # Delete the original search message in the group
+                await client.delete_messages(delete_chat_id, delete_message_id)
+            except Exception as e:
+                print(f"Error during autodelete: {e}")
+        return True, "File sent successfully."
+    else:
+        # Error message is sent to user if both attempts fail (English)
+        error_msg = "❌ **File could not be sent!** ❌\n\nPossible reasons:\n1. You have blocked the bot (Unblock and send /start).\n2. The source file is protected (Restrict Saving Content is ON).\n3. The bot lacks 'Post Messages' permission in the storage channel."
         try:
             await client.send_message(user_id, error_msg)
         except Exception:
@@ -458,7 +487,7 @@ async def send_file_handler(client, callback):
     
     is_admin = user_id in ADMINS
     
-    # 1. ADMIN CHECK
+    # 1. ADMIN CHECK: Admins skip everything and get the file immediately.
     if is_admin:
         await callback.answer("Admin detected. Copying file...", show_alert=False)
         await handle_send_file(client, user_id, message_id)
@@ -469,7 +498,7 @@ async def send_file_handler(client, callback):
             pass 
         return
         
-    # 2. FORCE SUB CHECK
+    # 2. FORCE SUB CHECK (Only for non-admins)
     if FORCE_SUB_CHANNEL and not await is_subscribed(client, user_id, max_retries=3):
         # English translations for buttons
         join_button = [
@@ -523,6 +552,12 @@ async def check_sub_handler(client, callback):
     
     # Data is split into: [checksub, message_id, group_message_id, group_chat_id]
     data_parts = callback.data.split("_")
+    
+    # Ensure there are at least 4 parts (checksub, message_id, group_message_id, group_chat_id)
+    if len(data_parts) < 4:
+         await callback.answer("❌ Invalid callback data structure.", show_alert=True)
+         return
+         
     message_id = int(data_parts[1])
     group_message_id = int(data_parts[2])
     group_chat_id = int(data_parts[3])
@@ -568,8 +603,7 @@ async def startup_initial_checks():
     # 2. Force Sub Admin check (CRITICAL)
     if FORCE_SUB_CHANNEL:
         print(f"FORCE_SUB_CHANNEL is set to: {FORCE_SUB_CHANNEL}. Verifying bot administration status...")
-        if not USER_SESSION_STRING:
-             print("WARNING: USER_SESSION_STRING not available. Skipping Force Sub Admin check.")
+        # NOTE: A more thorough admin check can be done here if needed.
         
 @asynccontextmanager
 async def lifespan(web_app: FastAPI):
@@ -579,8 +613,11 @@ async def lifespan(web_app: FastAPI):
     if WEBHOOK_URL_BASE:
         # Start Pyrogram client and set webhook
         await app.start() 
-        await app.set_webhook(url=f"{WEBHOOK_URL_BASE}{WEBHOOK_PATH}")
-        print(f"Webhook successfully set: {WEBHOOK_URL_BASE}{WEBHOOK_PATH}")
+        try:
+            await app.set_webhook(url=f"{WEBHOOK_URL_BASE}{WEBHOOK_PATH}")
+            print(f"Webhook successfully set: {WEBHOOK_URL_BASE}{WEBHOOK_PATH}")
+        except RPCError as e:
+             print(f"Webhook Error: {e}")
     else:
         # Start in polling mode (local testing)
         await app.start()
