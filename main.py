@@ -1,4 +1,4 @@
-Import os
+import os # <-- SYNTAX FIX 1: 'Import' changed to 'import'
 import re
 import asyncio
 import json
@@ -9,7 +9,7 @@ from pyrogram.errors import UserNotParticipant, MessageNotModified, ChatAdminReq
 from motor.motor_asyncio import AsyncIOMotorClient
 from dotenv import load_dotenv
 from typing import List, Dict, Any, Union
-from fastapi import FastAPI, Request, Response # Important: Imports needed for Uvicorn
+from fastapi import FastAPI, Request, Response 
 from contextlib import asynccontextmanager
 from http import HTTPStatus
 import uvicorn
@@ -56,7 +56,8 @@ class Database:
         cursor = self.files_col.find({})
         return await cursor.to_list(length=None)
 
-    async def find_one(self, query: Dict[str, Any]) -> Dict[str, Any] | None:
+    # <-- SYNTAX FIX 2: Changed 'Dict | None' to 'Union[Dict, None]' for Python 3.9 compatibility -->
+    async def find_one(self, query: Dict[str, Any]) -> Union[Dict[str, Any], None]:
         """Finds a single document matching the query."""
         return await self.files_col.find_one(query)
 
@@ -85,7 +86,7 @@ class AutoFilterBot(Client):
 app = AutoFilterBot()
 
 # Global User Client Instance (for indexing and protected content forwarding)
-user_client: Client | None = None
+user_client: Union[Client, None] = None
 if USER_SESSION_STRING:
     user_client = Client(
         "indexer_session",
@@ -96,7 +97,7 @@ if USER_SESSION_STRING:
     print("User session initialized for indexing/forwarding.")
 
 
-# --- RENDER WEBHOOK SETUP (FastAPI) - MOVED UP TO PREVENT LOADING ERRORS ---
+# --- RENDER WEBHOOK SETUP (FastAPI) ---
 
 async def startup_initial_checks():
     """Checks to run on startup."""
@@ -241,7 +242,8 @@ async def get_file_details(query: str):
     return files
 
 # Function to extract file details
-def get_file_info(message: Message) -> tuple[str, str, Union[Document, Video, Audio, None]]:
+# Type hint adjusted to support older Python versions
+def get_file_info(message: Message) -> tuple[Union[str, None], Union[str, None], Union[Document, Video, Audio, None]]:
     """Finds file_id, file_name, and file_object from a message."""
     if message.document and message.document.file_name:
         return message.document.file_id, message.document.file_name, message.document
