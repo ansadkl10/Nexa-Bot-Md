@@ -171,6 +171,7 @@ async def lifespan(web_app: FastAPI):
         await app.set_webhook(url=f"{WEBHOOK_URL_BASE}{WEBHOOK_PATH}")
         print(f"Webhook successfully set: {WEBHOOK_URL_BASE}{WEBHOOK_PATH}")
     else:
+        # In a real cloud deploy, this should not run if WEBHOOK_URL_BASE is set
         print("Starting in polling mode (for local testing only).")
         
     yield
@@ -866,13 +867,11 @@ async def redirect_to_dm_handler(client, callback):
 # --- MAIN ENTRY POINT ---
 
 if __name__ == "__main__":
-    # The variable 'autofilter_bot' should be the name of this Python file (e.g., 'autofilter_bot.py').
-    # I've used 'autofilter_bot' below as a placeholder module name for Uvicorn's import.
     if WEBHOOK_URL_BASE:
         # Use uvicorn to serve the FastAPI app (for Render deployment)
-        # CRITICAL: 'main' is used here assuming the file is named 'main.py'
-        # NOTE: You might need to adjust "autofilter_bot:api_app" based on your file name.
-        uvicorn.run("autofilter_bot:api_app", host="0.0.0.0", port=PORT, log_level="info")
+        # CRITICAL: Assuming the file is named 'main.py' for Render deploy.
+        # RENDER DEPLOY START COMMAND: uvicorn main:api_app --host 0.0.0.0 --port $PORT
+        uvicorn.run("main:api_app", host="0.0.0.0", port=PORT, log_level="info")
     else:
         # Use app.run() for local polling mode testing
         print("Starting Pyrogram in polling mode...")
