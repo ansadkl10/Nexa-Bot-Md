@@ -1,6 +1,8 @@
 import fs from 'fs'  
 import { DisconnectReason } from '@whiskeysockets/baileys'
-
+  await sock.sendPresenceUpdate('composing', from);
+               await new Promise(resolve => setTimeout(resolve, 4000));
+}
    sock.ev.on('connection.update', async (update) => {
         const { connection, lastDisconnect } = update;
         if (connection === 'close') {
