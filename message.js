@@ -16,9 +16,9 @@ export default async (sock, chatUpdate) => {
         const sender = msg.key.participant || msg.key.remoteJid;
         const toggles = getToggles();
 
-        // Parse Message
-        const { isCmd, commandName, args } = parseMessage(msg);
-
+        // Parse Message 
+        const { body, text, isCmd, commandName, args } = parseMessage(msg);
+        
         //  Mode Check
         if (!checkMode(sender, toggles)) return;
 
