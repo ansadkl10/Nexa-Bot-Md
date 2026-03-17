@@ -1,33 +1,98 @@
 import fs from "fs";
 import path from "path";
-import { pathToFileURL } from 'url';
+import { pathToFileURL } from "url";
 import config from "./config.js";
+const toggleFile = "./database/toggles.json";
+
+// load toggles
+let toggles = {};
+if (fs.existsSync(toggleFile)) {
+    toggles = JSON.parse(fs.readFileSync(toggleFile));
+}
+
+// save toggles
+const saveToggles = () => {
+    fs.writeFileSync(toggleFile, JSON.stringify(toggles, null, 2));
+};
 
 export default async (sock, chatUpdate) => {
+
     try {
-        const msg = chatUpdate.messages[0];
-        if (!msg.message || msg.key.remoteJid === 'status@broadcast') return;
+
+        const msg = chatUpdate.messages?.[0];
+        if (!msg || !msg.message) return;
+        if (msg.key.remoteJid === "status@broadcast") return;
 
         const from = msg.key.remoteJid;
-        const body = (msg.message.conversation || msg.message.extendedTextMessage?.text || "").trim();
-        const isCmd = body.startsWith(config.PREFIX);
-        const commandName = isCmd ? body.slice(config.PREFIX.length).split(" ")[0].toLowerCase() : "";
-        const args = body.trim().split(/ +/).slice(1);
 
-        if (isCmd) {
-            await sock.sendPresenceUpdate('composing', from);
-            const commandPath = path.join(process.cwd(), "plugins", `${commandName}.js`);
+        const body =
+            msg.message.conversation ||
+            msg.message.extendedTextMessage?.text ||
+            "";
 
-            if (fs.existsSync(commandPath)) {
-                await sock.sendPresenceUpdate('composing', from);
-                const moduleUrl = pathToFileURL(commandPath).href + `?update=${Date.now()}`;
-                const commandModule = await import(moduleUrl);
-                
-                const handler = commandModule.default || commandModule.run;
-                if (handler) await handler(sock, msg, args);
-            }
+        const text = body.trim();
+        const isCmd = text.startsWith(config.PREFIX);
+
+        const commandName = isCmd
+            ? text.slice(config.PREFIX.length).split(" ")[0].toLowerCase()
+            : "";
+
+        const args = text.split(/ +/).slice(1);
+
+        if (!isCmd) return;
+
+        const commandPath = path.join(process.cwd(), "plugins", `${commandName}.js`);
+
+        if (!fs.existsSync(commandPath)) {
+            console.log(`\x1b[33m[NOT FOUND] -> ${commandName}\x1b[0m`);
+            return;
         }
+
+        await sock.sendPresenceUpdate("composing", from);
+
+        const moduleUrl = pathToFileURL(commandPath).href + `?update=${Date.now()}`;
+        const commandModule = await import(moduleUrl);
+
+        const handler = commandModule.default || commandModule.run;
+
+        // toggle system
+        if (args[0] === "on" || args[0] === "off") {
+
+            const state = args[0] === "on";
+
+            if (!toggles[from]) toggles[from] = {};
+
+            toggles[from][commandName] = state;
+
+            saveToggles();
+
+            await sock.sendMessage(from, {
+                text: `⚙️ *${commandName}*\nStatus: ${state ? "🟢 Enabled" : "🔴 Disabled"}`
+            }, { quoted: msg });
+
+            return;
+        }
+
+        // check toggle
+        if (toggles[from]?.[commandName] === false) {
+
+            return await sock.sendMessage(from, {
+                text: `⚠️ *${commandName}* is currently disabled`
+            }, { quoted: msg });
+
+        }
+
+        if (handler) {
+
+            await handler(sock, msg, args, { toggles });
+
+            console.log(`\x1b[32m[SUCCESS] -> ${commandName} executed\x1b[0m`);
+
+        }
+
     } catch (err) {
+
         console.error("Message Error:", err);
+
     }
 };
