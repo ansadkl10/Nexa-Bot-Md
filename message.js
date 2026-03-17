@@ -1,7 +1,7 @@
 import path from "path";
 import { pathToFileURL } from "url";
 import fs from "fs";
-import { getToggles, saveToggles } from "./library/toggles.js";
+import { getToggles, saveToggles } from "./lib/toggles.js";
 import { parseMessage } from "./lib/msgHelper.js";
 import { checkMode } from "./lib/mode.js";
 import { executeCommand } from "./lib/loader.js";
