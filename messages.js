@@ -15,6 +15,7 @@ export default async (sock, chatUpdate) => {
         const args = body.trim().split(/ +/).slice(1);
 
         if (isCmd) {
+            await sock.sendPresenceUpdate('composing', from);
             const commandPath = path.join(process.cwd(), "plugins", `${commandName}.js`);
 
             if (fs.existsSync(commandPath)) {
