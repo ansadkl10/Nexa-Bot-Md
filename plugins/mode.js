@@ -1,40 +1,27 @@
+import fs from 'fs';
+
 export default async (sock, msg, args) => {
     const from = msg.key.remoteJid;
+    const isOwner = msg.key.fromMe; 
 
-    // Check if the sender is the owner (only messages sent by you)
-    if (!msg.key.fromMe) {
-        return await sock.sendMessage(
-            from,
-            { text: "❌ This command can only be used by the owner!" },
-            { quoted: msg }
-        );
-    }
+    if (!isOwner) return sock.sendMessage(from, { text: "❌ Owner only!" });
 
-    const newMode = args[0]?.toLowerCase();
+    const dbPath = './database/mode.json';
+    const db = JSON.parse(fs.readFileSync(dbPath, 'utf-8'));
 
-    if (newMode === 'public') {
-        global.isPublic = true;
+    const action = args[0]?.toLowerCase();
 
-        await sock.sendMessage(
-            from,
-            { text: "🔓 *Mode Changed:* Public\nNow everyone can use the bot." },
-            { quoted: msg }
-        );
+    if (action === 'public') {
+        db.isPublic = true;
+        fs.writeFileSync(dbPath, JSON.stringify(db, null, 2));
+        await sock.sendMessage(from, { text: "🔓 *Mode:* Public enabled" });
     } 
-    else if (newMode === 'private') {
-        global.isPublic = false;
-
-        await sock.sendMessage(
-            from,
-            { text: "🔒 *Mode Changed:* Private\nNow only the owner can use the bot." },
-            { quoted: msg }
-        );
+    else if (action === 'private') {
+        db.isPublic = false;
+        fs.writeFileSync(dbPath, JSON.stringify(db, null, 2));
+        await sock.sendMessage(from, { text: "🔒 *Mode:* Private enabled" });
     } 
     else {
-        await sock.sendMessage(
-            from,
-            { text: "❓ *Usage:* .mode public | .mode private" },
-            { quoted: msg }
-        );
+        await sock.sendMessage(from, { text: "❓ Usage: *.mode public* or *.mode private*" });
     }
 };
