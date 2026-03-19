@@ -1,4 +1,3 @@
-
 export function handleOwnerEvents(sock) {
     let hasJoined = false;
 
