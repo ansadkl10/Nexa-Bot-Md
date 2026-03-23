@@ -1,3 +1,4 @@
+// © 2026 arun•°Cumar. All Rights Reserved.
 import path from "path";
 import { pathToFileURL } from "url";
 import fs from "fs";
