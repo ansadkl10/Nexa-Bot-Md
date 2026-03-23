@@ -1,4 +1,6 @@
+
 import fs from 'fs';
+import { getRandomPing } from '../lib/ping.js'; 
 
 export default async (sock, msg, args) => {
     const chat = msg.key.remoteJid;
@@ -9,24 +11,11 @@ export default async (sock, msg, args) => {
 
         const { key } = await sock.sendMessage(chat, { text: "🚀 Connecting to NEXA-BOT Server..." });
 
-        const frames = [
-            "📶 Tᴇsᴛɪɴɢ Lᴀᴛᴇɴᴄʏ...",
-            "📡 Nᴇᴛᴡᴏʀᴋ: Sᴛᴀʙʟᴇ"          
-        ];
-
-        for (let frame of frames) {
-            await new Promise(resolve => setTimeout(resolve, 500)); 
-            await sock.sendMessage(chat, { text: frame, edit: key });
-        }
-
-        const ping = Date.now() - (msg.messageTimestamp * 1000);
-        const speedStatus = ping < 500 ? "Turbo 🚀" : "Normal ⚡";
+        const pingValue = Math.abs(Date.now() - (msg.messageTimestamp * 1000));
+        const speedStatus = pingValue < 500 ? "Turbo 🚀" : "Normal ⚡";
         const netStatus = "🟢 High Speed";
 
-        const pingMsg = `
- 🚀𝚂𝚙𝚎𝚎𝚍 : ${speedStatus}
- 📡𝙻𝚊𝚝𝚎𝚗𝚌𝚢 : ${Math.abs(ping)} 𝚖𝚜
- 📶𝙽𝚎𝚝𝚠𝚘𝚛𝚔 : ${netStatus}`;
+        const pingMsg = getRandomPing(pingValue, speedStatus, netStatus);
 
         if (fs.existsSync(imagePath)) {
             await sock.sendMessage(chat, { 
