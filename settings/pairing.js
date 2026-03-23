@@ -1,3 +1,4 @@
+// © 2026 arun•°Cumar. All Rights Reserved.
 import chalk from 'chalk';
 import readline from 'readline';
 
