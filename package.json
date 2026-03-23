@@ -1,23 +1,27 @@
 {
   "name": "Nexa-Bot-MD",
   "version": "v2.0",
-  "description": "nexa Whatsapp  Bot by arun•°Cumar & Ansad",
+  "description": "Nexa Whatsapp  Bot by arun•°Cumar & Ansad",
   "main": "main.js",
   "type": "module",
   "scripts": {
     "start": "node main.js"
+    
   },
   "dependencies": {
-    "@adiwajshing/keyed-db": "latest",
-    "@whiskeysockets/baileys": "latest",
-    "axios": "latest",
-    "chalk": "latest",
-    "express": "latest",
-    "ffmpeg-static": "^5.3.0",
-    "fluent-ffmpeg": "^2.1.3",
-    "fs-extra": "latest",
-    "pino": "latest",
-    "qrcode-terminal": "latest",
-    "yt-search": "latest",
+    "@adiwajshing/keyed-db": "0.2.4",
+    "@whiskeysockets/baileys": "7.0.0-rc.9",
+    "axios": "1.7.9",
+    "chalk": "4.1.2",
+    "express": "4.21.2",
+    "ffmpeg-static": "5.2.0",
+    "fluent-ffmpeg": "2.1.3",
+    "fs-extra": "11.3.0",
+    "pino": "9.6.0",
+    "qrcode-terminal": "0.12.0",
+    "yt-search": "2.12.1"
+  },
+  "engines": {
+    "node": ">=18.0.0"
   }
 }
