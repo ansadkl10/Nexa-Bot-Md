@@ -1,3 +1,4 @@
+// © 2026 arun•°Cumar. All Rights Reserved.
 const config = {
   
   OWNER_NAME: ["Arun", "Ansad"],
