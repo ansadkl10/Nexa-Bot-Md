@@ -1,21 +1,26 @@
-MIT License
+PROPRIETARY LICENSE - ALL RIGHTS RESERVED
 
 Copyright (c) 2026 arun•°Cumar
 
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
+1. OWNERSHIP:
+The Software (Source Code, Assets, and Documentation) is the exclusive property 
+of arun•°Cumar. All intellectual property rights are reserved.
 
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
+2. PERMITTED USE (DEPLOYMENT ONLY):
+Permission is hereby granted ONLY for the personal or commercial deployment 
+and execution of the Software. You may run the bot on any server (Heroku, VPS, 
+Panel, etc.) for its intended purpose.
 
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
+3. RESTRICTIONS (STRICTLY PROHIBITED):
+- You may NOT modify, edit, or change any part of the source code.
+- You may NOT remove or alter the developer's name, credits, or branding (arun•°Cumar).
+- You may NOT redistribute, sublicense, or sell this software to any third party.
+- You may NOT host the source code on your own public GitHub repository 
+  without linking back to the original source.
+
+4. TERMINATION:
+Any violation of these terms will result in the immediate termination of 
+your right to use this software and may lead to DMCA takedown actions 
+on platforms like GitHub or Heroku.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND.
