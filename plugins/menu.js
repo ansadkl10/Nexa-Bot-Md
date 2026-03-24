@@ -20,7 +20,7 @@ export default async (sock, msg, args) => {
             commandList += `${index + 1}. ${config.PREFIX}${cmdName}\n`;
         });
 
-        // Random menu design
+        // design
         const randomDesign = menuDesigns[Math.floor(Math.random() * menuDesigns.length)];
 
         const menuText = randomDesign
