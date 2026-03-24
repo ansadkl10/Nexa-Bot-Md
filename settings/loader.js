@@ -1,4 +1,5 @@
 // © 2026 arun•°Cumar. All Rights Reserved.
+import { fquoted } from './lib/quoted.js';
 import menuHandler from '../commands/menu.js';
 import aliveHandler from '../commands/alive.js';
 import pingHandler from '../commands/ping.js';
@@ -12,21 +13,16 @@ export default async (commandName, sock, msg, args, extra) => {
     } 
     
     else if (commandName === 'alive') {
-        await aliveHandler(sock, msg);
+        await aliveHandler(sock, msg, fquoted);
     }
     
      else if (commandName === 'ping') {
-        await pingHandler(sock, msg);
+        await pingHandler(sock, msg, fquoted);
     }
      
      else if (commandName === 'url') {
-        await urlHandler(sock, msg);
+        await urlHandler(sock, msg, fquoted);
     }
-
-        await sock.sendMessage(from, { text: "Nexa-Bot-MD is Online! ⚡" }, { quoted: fquoted.channel });
-    }
-
-    else {
         
         console.log(`Unknown command: ${commandName}`);
     }
