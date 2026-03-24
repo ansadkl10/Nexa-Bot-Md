@@ -3,7 +3,7 @@ import path from "path";
 import { pathToFileURL } from "url";
 import fs from "fs";
 import { getToggles } from "./lib/toggles.js";
-import { fquoted } from './lib/quoted.js';
+import { fquoted } from './settings/quoted.js';
 import { parseMessage } from "./settings/msgHelper.js";
 import { executeCommand } from "./settings/loader.js";
 import config from "./config.js";
