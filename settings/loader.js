@@ -1,6 +1,6 @@
 // © 2026 arun•°Cumar. All Rights Reserved.  
 import { fquoted } from './quoted.js'; 
-import ownerHandler from './plugins/owner.js';
+import ownerHandler from '../plugins/owner.js';
 import menuHandler from '../plugins/menu.js';  
 import aliveHandler from '../plugins/alive.js';  
 import pingHandler from '../plugins/ping.js';  
