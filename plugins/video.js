@@ -24,7 +24,7 @@ export default async (sock, msg, args) => {
 
         await sock.sendMessage(from, { 
             video: { url: filePath },
-            caption: "✅ Downloaded via Asura-MD"
+            caption: "✅ Downloaded via Nexa-Bot"
         }, { quoted: msg });
 
         fs.unlinkSync(filePath);
