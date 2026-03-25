@@ -20,13 +20,14 @@ const sessionData = process.env.SESSION_ID;
 
 // SESSION
 if (sessionData) {
-    if (!fs.existsSync(sessionPath)) {
-        fs.mkdirSync(sessionPath, { recursive: true });
-    }
-    const credsPath = path.join(sessionPath, "creds.json");
     try {
-        fs.writeFileSync(credsPath, sessionData.trim());
+        if (!fs.existsSync(sessionPath)) {
+            fs.mkdirSync(sessionPath, { recursive: true });
+        }
+
+        fs.writeFileSync("./session/creds.json", sessionData);
         console.log("✅ Session file restored from ENV");
+
     } catch (err) {
         console.log("❌ Session restore failed:", err.message);
     }
@@ -62,8 +63,13 @@ async function startNexa() {
     connectionHandler(sock, startNexa, saveCreds);
 
     sock.ev.on("messages.upsert", async (chatUpdate) => {
+    try {
         await messageHandler(sock, chatUpdate);
-    });
+    } catch (err) {
+        console.log("Message Error:", err);
+    }
+});
+
 }
 
-startNexa();
+startNexa().catch(err => console.log("Start Error:", err));
