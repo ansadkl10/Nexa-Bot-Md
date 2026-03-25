@@ -6,7 +6,7 @@ import { aliveStyles } from '../lib/alive.js';
 export default async (sock, msg, args) => {
     const chat = msg.key.remoteJid;
     try {
-        await sock.sendMessage(chat, { react: { text: '💚', key: msg.key } });
+        await sock.sendMessage(chat, { react: { text: '🩸', key: msg.key } });
 
         // Uptime & RAM Calculation
         const uptimeSeconds = process.uptime();
