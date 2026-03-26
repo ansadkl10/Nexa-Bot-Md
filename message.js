@@ -27,7 +27,7 @@ export default async (sock, chatUpdate) => {
        }
 
         //  Mention Sticker Logic
-        handleMentionSticker(sock, msg, from);
+        await handleMentionSticker(sock, msg, from);
         
         // Parse Message    
         const { isCmd, commandName, args } = parseMessage(msg);    
