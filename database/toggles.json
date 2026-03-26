@@ -1,1 +1,10 @@
-{}
+{
+  "sticker": {
+    "status": "on",
+    "mode": "public"
+  },
+  "alive": {
+    "status": "on",
+    "mode": "public"
+  }
+}
