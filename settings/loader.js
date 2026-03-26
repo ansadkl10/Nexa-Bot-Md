@@ -1,5 +1,4 @@
 // © 2026 arun•°Cumar. All Rights Reserved.   
-import { getQuoted } from './quoted.js'; 
 import ownerHandler from '../plugins/owner.js';
 import menuHandler from '../plugins/menu.js';  
 import aliveHandler from '../plugins/alive.js';  
@@ -19,38 +18,38 @@ export async function handleCommands(commandName, sock, msg, args, extra) {
     switch (commandName) {
         case 'menu':
         case 'help':
-            await menuHandler(sock, msg, args, { isOwner, isAdmin, quoted });
+            await menuHandler(sock, msg, args, { isOwner, isAdmin });
             break;
 
         case 'owner':
-            await ownerHandler(sock, msg, args, { isOwner, isAdmin, quoted });
+            await ownerHandler(sock, msg, args, { isOwner, isAdmin });
             break;
 
         case 'alive':
-            await aliveHandler(sock, msg, args, { isOwner, isAdmin, quoted });
+            await aliveHandler(sock, msg, args, { isOwner, isAdmin });
             break;
 
         case 'ping':
-            await pingHandler(sock, msg, args, { isOwner, isAdmin, quoted });
+            await pingHandler(sock, msg, args, { isOwner, isAdmin });
             break;
 
         case 'url':
         case 'link':
-            await urlHandler(sock, msg, args, { isOwner, isAdmin, quoted });
+            await urlHandler(sock, msg, args, { isOwner, isAdmin });
             break;
 
         case 'sticker':
         case 's':
-            await stickerHandler(sock, msg, args, { isOwner, isAdmin, quoted });
+            await stickerHandler(sock, msg, args, { isOwner, isAdmin });
             break;
 
         case 'video':
-            await videoHandler(sock, msg, args, { isOwner, isAdmin, quoted });
+            await videoHandler(sock, msg, args, { isOwner, isAdmin });
             break;
 
         case 'play':
         case 'song':
-            await playHandler(sock, msg, args, { isOwner, isAdmin, quoted });
+            await playHandler(sock, msg, args, { isOwner, isAdmin });
             break;
         
         default:
