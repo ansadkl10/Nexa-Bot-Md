@@ -60,7 +60,23 @@ export default async (sock, msg, args) => {
             .replace('{prefix}', config.PREFIX)
             .replace('{commands}', commandList);
 
+    await sock.sendMessage(from, { 
+            text: menuText,
+            contextInfo: {
+                externalAdReply: {
+                    title: config.BOT_NAME,
+                    body: "Nexa Menu",
+                    mediaType: 1,
+                    sourceUrl: "https://whatsapp.com/channel/0029VbB59W9GehENxhoI5l24",
+                    thumbnail: fs.readFileSync('./media/nexa.jpg') 
+                }
+            }
+        }, { quoted: msg });
+
     } catch (err) {
         console.log("Menu Error:", err);
+
+        await sock.sendMessage(msg.key.remoteJid, { text: "❌ error." });
     }
 };
+
