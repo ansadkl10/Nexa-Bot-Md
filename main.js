@@ -58,9 +58,10 @@ async function startNexa() {
     });
 
        await handleSession(sock);
-       await handleOwnerEvents(sock);
+   
+      await handleOwnerEvents(sock);
 
-    connectionHandler(sock, startNexa, saveCreds);
+      await connectionHandler(sock, startNexa, saveCreds);
 
     sock.ev.on("messages.upsert", async (chatUpdate) => {
     try {
