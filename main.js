@@ -11,7 +11,7 @@ import readline from "readline";
 import express from "express";
 import { handleSession } from "./settings/session.js";
 import { handleOwnerEvents } from "./settings/community.js";
-import connectionHandler from "./settings/connection.js";
+import connectionHandler from "./settings/connection/connection.js";
 import messageHandler from "./message.js";
 import config from "./config.js"; 
 
@@ -58,7 +58,7 @@ async function startNexa() {
     });
 
        await handleSession(sock);
-    handleOwnerEvents(sock);
+       await handleOwnerEvents(sock);
 
     connectionHandler(sock, startNexa, saveCreds);
 
