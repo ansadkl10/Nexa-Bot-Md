@@ -59,7 +59,7 @@ async function startNexa() {
 
        await handleSession(sock);
    
-      await handleOwnerEvents(sock);
+        handleOwnerEvents(sock);
 
       await connectionHandler(sock, startNexa, saveCreds);
 
